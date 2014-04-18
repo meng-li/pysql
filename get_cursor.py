@@ -2,6 +2,7 @@
 import MySQLdb
 import warnings
 import traceback
+import re
 
 farm_cfg_dict = {}
 farm_tables_dict = {}
@@ -53,6 +54,69 @@ def load_tables(farm=None):
     else:
         for farm in farm_cfg_dict:
             get_tables(farm, update=True)
+
+def find_table(s):
+    def _table_reg(s, reg_str, func):
+        m = re.search(reg_str, s, flags=re.I)
+        if m:
+            return func(m)
+        return None
+
+    table = None
+    table = _table_reg(s,
+                        r"^\\s*(?:explain"
+                        r"(?:\\s+extended)?\\s+)?select.*"
+                        r"?\\sfrom(?:\\s+|\\s*`)(\\w+)",
+                        lambda m: m.group(1))
+    if table:
+        return (table, True)
+    table = _table_reg(s,
+                           r"^\s*delete"
+                           r"(?:\s+(?:low_priority|quick|ignore))*"
+                           r"\s+from(?:\s+|\s*`)(\w+)",
+                           lambda m: m.group(1))
+    if table: return table, False
+    table = _table_reg(s,
+                           "^\\s*(?:insert|update|replace|alter|drop|rename|truncate)"
+                           "(?:\\s+(?:low_priority|delayed|high_priority|ignore|into|temporary|table))*"
+                           "(?:\\s+|\\s*`)(\\w+)",
+                           lambda m: m.group(1))
+    if table: return (table, False)
+    table = _table_reg(s,
+                           "^\\s*(?:explain|desc(?:ribe)?)(?:\\s+|\\s*`)(\\w+)",
+                           lambda m:m.group(1))
+    if table: return (table, True)
+    table = _table_reg(s,
+                           "^\\s*show\\s+create\\s+table(?:\\s+|\\s*`)(\\w+)",
+                           lambda m:m.group(1))
+    if table: return (table, True)
+    table = _table_reg(s,
+                           "^\\s*(?:repair|analyze|backup|restore)"
+                           "(?:\\s+(?:no_write_to_binlog|local))*\\s+table"
+                           "(?:\\s+|\\s*`)(\\w+)",
+                           lambda m:m.group(1))
+    if table: return (table, False)
+    table = _table_reg(s,
+                           "^\\s*load\\s+data"
+                           "(?:\\s+(?:low_priority|concurrent|local))*\\s+infile"
+                           "\\s*['\"][^'\"]+['\"]"
+                           "(?:\\s+(?:replace|ignore))*"
+                           "\\s+into\\s+table"
+                           "(?:\\s+|\\s*`)(\\w+)",
+                           lambda m: m.group(1))
+    if table: return (table, True)
+    table = _table_reg(s,
+                           "^\\s*(?:check|checksum)\\s+table(?:\\s+|\\s*`)(\\w+)",
+                           lambda m:m.group(1))
+    if table: return (table, False)
+    table = _table_reg(s,
+                           r"^\s*show\s+table\s+status\s+"
+                           r"(?:from\s+\w+\s+)?like\s+([\w'\"]+)",
+                           lambda m: m.group(1).strip('"\''))
+    if table: return (table, False)
+
+    table = None
+
 
 def get_tables(farm, update=False):
     farm = normalize_farm_name(farm)
@@ -138,8 +202,6 @@ def get_cursor(**kargs):
             sargs.pop('ro', 0)
         if 'reconnect' in sargs:
             sargs.pop('reconnect', 0)
-        if 'persist' in sargs:
-            sargs.pop('persist', 0)
         if 'quota' in sargs:
             sargs.pop('quota', 0)
         if 'static' in sargs:
