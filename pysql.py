@@ -59,6 +59,27 @@ def get_terminal_width():
             pass
     return width or 120
 
+def rearrange_col_width(col_name, col_width, margin_width, max_width=20):
+    terminal_width = get_terminal_width()
+    name_width = sum([max(str_width(name), 1) for name in col_name])
+    if terminal_width < (name_width + margin_width):
+        return None
+    content_width = terminal_width - margin_width
+    if content_width >= sum(col_width):
+        return col_width
+    else:
+        narrow_width = sum([_width for _width in col_width if _width <= max_width])
+        if narrow_width > content_width:
+            return None
+        else:
+            left_width = content_width - narrow_width
+            over_width_cnt = sum([1 for _width in col_width if _width > max_width])
+            append_width = left_width / over_width_cnt
+            for idx, val in enumerate(col_width):
+                if val > max_width:
+                    col_width[idx] = append_width
+            return col_width
+
 def str_split(text, max_len, padding=' '):
     try:
         text = text.decode('utf8')
@@ -118,6 +139,27 @@ def wrap_cols_line(row, cl, cr, cs, col_cnt, col_width,
             fp.write(col_end)
         fp.write('%s\n' % cr)
 
+def print_sql_result_g(cursor, fp, span=7):
+    if not cursor.description:
+        print >>fp, '#no result'
+        return
+    terminal_width = get_terminal_width()
+    names = [val[0] for val in cursor.description]
+    names_max_width = max([str_width(_name) for _name in names])
+    max_col_width = terminal_width - names_max_width - span - 1
+    for row_idx, row in enumerate(cursor):
+        print >>fp, '%s rows %s %s' % ('*' * 40, row_idx + 1, '*' * 40)
+        for col_idx, name in enumerate(names):
+            lines = str_split(str(row[col_idx]) if row[col_idx] else ' ',
+                    max_col_width)
+            for idx, line in enumerate(lines):
+                if idx == 0:
+                    print >>fp, '%s:%s%s' % (name,
+                            ' ' * (names_max_width + span - str_width(name) - 1),
+                            line)
+                else:
+                    print >>fp, '%s%s' % (' ' * (names_max_width + span), line)
+
 def print_sql_result(cursor, swidth, fp):
     # component for tables
     ml, mr, ms, mb = '', '', '', ''
@@ -129,7 +171,8 @@ def print_sql_result(cursor, swidth, fp):
 
     # local column & row's size for tables
     desc = cursor.description
-    NAME, TYPE_CODE, DISPLAY_SIZE, INTERNAL_SIZE, PRECISION, SCALE, NULL_OK = range(7)
+    NAME, TYPE_CODE, DISPLAY_SIZE, INTERNAL_SIZE, PRECISION, SCALE, NULL_OK = \
+            range(7)
     if not desc:
         print >>fp, '#no result'
         return
@@ -141,16 +184,22 @@ def print_sql_result(cursor, swidth, fp):
     row_cnt = len(data)
     for row in data:
         for col_idx in range(col_cnt):
-            col_width[col_idx] = max(col_width[col_idx], str_width(str(row[col_idx]) or ''))
+            col_width[col_idx] = max(col_width[col_idx],
+                    str_width(str(row[col_idx]) or ''))
+    margin_width = l_size + r_size + s_size * (col_cnt - 1)
+    col_width = rearrange_col_width(col_name, col_width, margin_width)
 
-    fp.write('\n')
-    wrap_line(ul, ur, us, ub, col_cnt, col_width, fp)
-    wrap_cols_line(col_name, h_cl, h_cr, h_cs, col_cnt, col_width, fp)
-    wrap_line(hl, hr, hs, hb, col_cnt, col_width, fp)
-    for row_idx, row in enumerate(data):
-        wrap_cols_line(row, m_cl, m_cr, m_cs, col_cnt, col_width, fp)
-        if ((row_idx + 1) < row_cnt) and ml and mr and ms:
-            wrap_line(ml, mr, ms, mb, col_cnt, col_width, fp)
-    wrap_line(ll, lr, ls, lb, col_cnt, col_width, fp)
+    # format output
+    if col_width:
+        wrap_line(ul, ur, us, ub, col_cnt, col_width, fp)
+        wrap_cols_line(col_name, h_cl, h_cr, h_cs, col_cnt, col_width, fp)
+        wrap_line(hl, hr, hs, hb, col_cnt, col_width, fp)
+        for row_idx, row in enumerate(data):
+            wrap_cols_line(row, m_cl, m_cr, m_cs, col_cnt, col_width, fp)
+            if ((row_idx + 1) < row_cnt) and ml and mr and ms:
+                wrap_line(ml, mr, ms, mb, col_cnt, col_width, fp)
+        wrap_line(ll, lr, ls, lb, col_cnt, col_width, fp)
+    else:
+        print_sql_result_g(cursor, fp)
 
 
