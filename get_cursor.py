@@ -52,8 +52,10 @@ def load_tables(farm=None):
             traceback.print_exc()
             return set()
     else:
+        table_set = set()
         for farm in farm_cfg_dict:
-            get_tables(farm, update=True)
+            table_set.update(get_tables(farm, update=True))
+        return table_set
 
 def find_table(s):
     def _table_reg(s, reg_str, func):
@@ -64,59 +66,65 @@ def find_table(s):
 
     table = None
     table = _table_reg(s,
-                        r"^\\s*(?:explain"
-                        r"(?:\\s+extended)?\\s+)?select.*"
-                        r"?\\sfrom(?:\\s+|\\s*`)(\\w+)",
+                        "^\\s*(?:explain" \
+                        "(?:\\s+extended)?\\s+)?select.*" \
+                        "?\\sfrom(?:\\s+|\\s*`)(\\w+)",
                         lambda m: m.group(1))
     if table:
         return (table, True)
     table = _table_reg(s,
-                           r"^\s*delete"
-                           r"(?:\s+(?:low_priority|quick|ignore))*"
-                           r"\s+from(?:\s+|\s*`)(\w+)",
-                           lambda m: m.group(1))
-    if table: return table, False
+                        r"^\s*delete"
+                        r"(?:\s+(?:low_priority|quick|ignore))*"
+                        r"\s+from(?:\s+|\s*`)(\w+)",
+                        lambda m: m.group(1))
+    if table:
+        return (table, False)
     table = _table_reg(s,
-                           "^\\s*(?:insert|update|replace|alter|drop|rename|truncate)"
-                           "(?:\\s+(?:low_priority|delayed|high_priority|ignore|into|temporary|table))*"
-                           "(?:\\s+|\\s*`)(\\w+)",
-                           lambda m: m.group(1))
-    if table: return (table, False)
+                        "^\\s*(?:insert|update|replace|alter|drop|rename|truncate)"
+                        "(?:\\s+(?:low_priority|delayed|high_priority|ignore|into|temporary|table))*"
+                        "(?:\\s+|\\s*`)(\\w+)",
+                        lambda m: m.group(1))
+    if table:
+        return (table, False)
     table = _table_reg(s,
-                           "^\\s*(?:explain|desc(?:ribe)?)(?:\\s+|\\s*`)(\\w+)",
-                           lambda m:m.group(1))
-    if table: return (table, True)
+                        "^\\s*(?:explain|desc(?:ribe)?)(?:\\s+|\\s*`)(\\w+)",
+                        lambda m:m.group(1))
+    if table:
+        return (table, True)
     table = _table_reg(s,
-                           "^\\s*show\\s+create\\s+table(?:\\s+|\\s*`)(\\w+)",
-                           lambda m:m.group(1))
-    if table: return (table, True)
+                        "^\\s*show\\s+create\\s+table(?:\\s+|\\s*`)(\\w+)",
+                        lambda m:m.group(1))
+    if table:
+        return (table, True)
     table = _table_reg(s,
-                           "^\\s*(?:repair|analyze|backup|restore)"
-                           "(?:\\s+(?:no_write_to_binlog|local))*\\s+table"
-                           "(?:\\s+|\\s*`)(\\w+)",
-                           lambda m:m.group(1))
-    if table: return (table, False)
+                        "^\\s*(?:repair|analyze|backup|restore)"
+                        "(?:\\s+(?:no_write_to_binlog|local))*\\s+table"
+                        "(?:\\s+|\\s*`)(\\w+)",
+                        lambda m:m.group(1))
+    if table:
+        return (table, False)
     table = _table_reg(s,
-                           "^\\s*load\\s+data"
-                           "(?:\\s+(?:low_priority|concurrent|local))*\\s+infile"
-                           "\\s*['\"][^'\"]+['\"]"
-                           "(?:\\s+(?:replace|ignore))*"
-                           "\\s+into\\s+table"
-                           "(?:\\s+|\\s*`)(\\w+)",
-                           lambda m: m.group(1))
-    if table: return (table, True)
+                        "^\\s*load\\s+data"
+                        "(?:\\s+(?:low_priority|concurrent|local))*\\s+infile"
+                        "\\s*['\"][^'\"]+['\"]"
+                        "(?:\\s+(?:replace|ignore))*"
+                        "\\s+into\\s+table"
+                        "(?:\\s+|\\s*`)(\\w+)",
+                        lambda m: m.group(1))
+    if table:
+        return (table, True)
     table = _table_reg(s,
-                           "^\\s*(?:check|checksum)\\s+table(?:\\s+|\\s*`)(\\w+)",
-                           lambda m:m.group(1))
-    if table: return (table, False)
+                        "^\\s*(?:check|checksum)\\s+table(?:\\s+|\\s*`)(\\w+)",
+                        lambda m:m.group(1))
+    if table:
+        return (table, False)
     table = _table_reg(s,
-                           r"^\s*show\s+table\s+status\s+"
-                           r"(?:from\s+\w+\s+)?like\s+([\w'\"]+)",
-                           lambda m: m.group(1).strip('"\''))
-    if table: return (table, False)
-
-    table = None
-
+                        r"^\s*show\s+table\s+status\s+"
+                        r"(?:from\s+\w+\s+)?like\s+([\w'\"]+)",
+                        lambda m: m.group(1).strip('"\''))
+    if table:
+        return (table, False)
+    return (None, True)
 
 def get_tables(farm, update=False):
     farm = normalize_farm_name(farm)

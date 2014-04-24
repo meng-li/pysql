@@ -1,5 +1,8 @@
 # -*- coding:utf-8 -*-
 import os
+import readline
+import traceback
+from get_cursor import find_table, load_tables, get_cursor
 
 def ch_width(ch):
     # East_Asian_Width:
@@ -201,5 +204,89 @@ def print_sql_result(cursor, swidth, fp):
         wrap_line(ll, lr, ls, lb, col_cnt, col_width, fp)
     else:
         print_sql_result_g(cursor, fp)
+
+def do_cmdline_complete(text, state, line=None, start_idx=0):
+    line = line or readline.get_line_buffer()
+    start = readline.get_begidx() - start_idx
+    # match start commands
+    if start == 0:
+        sql_start_commands = [
+                                'select', 'describe', 'explain', 'show',
+                                'create', 'insert', 'update', 'replace',
+                                'delete', 'drop', 'alter', 'rename',
+                                'truncate', 'repair', 'analyze', 'backup',
+                                'restore', 'check', 'checksum', 'load data'
+                             ]
+        options = [_command for _command in sql_start_commands \
+                   if _command.startswith(text)] + [None]
+        return options[state]
+
+    # match table and field
+    check_line = line[:start] + ' check_table_name__'
+    at_table_name = find_table(check_line)[0] == 'check_table_name__'
+    if not at_table_name:
+        table = find_table(line)[0]
+        if table and (table in all_tables):
+            cursor = get_cursor(table=table)
+            cursor.execute('desc `%s`' % table)
+            fields = [val[0] for val in cursor.fetchall()]
+            options = [_field for _field in fields if \
+                       _field.startswith(text)]
+            if state < len(options):
+                return options[state]
+            if options: return None
+    else:
+        table = text
+        if table.startswith('`'):
+            table = table[1:]
+        if table:
+            options = [_table for _table in all_tables if \
+                       _table.startswith(table)]
+            if text.startswith('`'):
+                return '`' + options[state] + '`'
+            if state < len(options):
+                return options[state]
+            if options: return None
+
+    # match sql function
+    sql_func_commands = [
+                            'count(', 'sum(', 'dinstinct', 'from', 'where',
+                            'limit', 'group by', 'replace', 'ignore',
+                            'order by', 'asc', 'desc', 'having', 'local',
+                            'infile', 'into table', 'values',
+                            'on duplicate key update'
+                        ]
+    options = [_func for _func in sql_func_commands if \
+               _func.startswith(text)] + [None]
+    return options[state]
+
+def parse_do():
+    pass
+
+if __name__ == '__main__':
+    try:
+        readline.parse_and_bind('tab: complete')
+        readline.set_completer(do_cmdline_complete)
+        global all_tables
+        all_tables = load_tables()
+    except:
+        pass
+    while True:
+        try:
+            line = raw_input('\001\033[1;32m\002pysql> \001\033[0m\002')
+        except EOFError:
+            print ''
+            break
+        except KeyboardInterrupt:
+            print ''
+            continue
+        except:
+            traceback.print_exc()
+            break
+        try:
+            parse_do()
+        except Exception:
+            traceback.print_exc()
+
 
 
