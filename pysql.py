@@ -1,7 +1,8 @@
 # -*- coding:utf-8 -*-
-import os
+import os, sys
 import readline
 import traceback
+import time
 from get_cursor import find_table, load_tables, get_cursor
 
 def ch_width(ch):
@@ -83,7 +84,7 @@ def rearrange_col_width(col_name, col_width, margin_width, max_width=20):
                     col_width[idx] = append_width
             return col_width
 
-def str_split(text, max_len, padding=' '):
+def str_split(text, max_len, padding=' ', center=False):
     try:
         text = text.decode('utf8')
     except:
@@ -102,8 +103,14 @@ def str_split(text, max_len, padding=' '):
             cur_line = ch
             cur_len = _width
     if len(cur_line):
-        lines.append(cur_line.encode('utf-8') + \
-                padding * (max_len - cur_len))
+        if center and (not lines):
+            former = (max_len - cur_len) / 2
+            latter = max_len - cur_len - former
+            lines.append(padding * former + \
+                    cur_line.encode('utf-8') + padding * latter)
+        else:
+            lines.append(cur_line.encode('utf-8') + \
+                    padding * (max_len - cur_len))
     return lines
 
 def wrap_line(lm, rm, isep, bar, col_cnt, col_width, fp):
@@ -123,7 +130,7 @@ def wrap_cols_line(row, cl, cr, cs, col_cnt, col_width,
             field = ''
         else:
             field = str(field)
-        lines = str_split(field, col_width[col_idx])
+        lines = str_split(field, col_width[col_idx], center=True)
         line_cnt = max(len(lines), line_cnt)
         line_content.append(lines)
     for line_idx in range(line_cnt):
@@ -163,7 +170,7 @@ def print_sql_result_g(cursor, fp, span=7):
                 else:
                     print >>fp, '%s%s' % (' ' * (names_max_width + span), line)
 
-def print_sql_result(cursor, swidth, fp):
+def print_sql_result(cursor, fp):
     # component for tables
     ml, mr, ms, mb = '', '', '', ''
     ul, ur, us, ub = "╔", "╗", "╤", "═"
@@ -260,8 +267,18 @@ def do_cmdline_complete(text, state, line=None, start_idx=0):
                _func.startswith(text)] + [None]
     return options[state]
 
-def parse_do():
-    pass
+def parse_do(line, fp):
+    table, ro = find_table(line)
+    if not table:
+        print 'no table found, try again!'
+        return
+    cursor = get_cursor(table=table, ro=ro)
+    start_time = time.time()
+    cursor.execute(line)
+    print_sql_result(cursor, fp)
+    end_time = time.time()
+    if (cursor.rowcount is not None) and (cursor.rowcount >= 0):
+        print '%s rows, %s seconds' % (cursor.rowcount, (end_time - start_time))
 
 if __name__ == '__main__':
     try:
@@ -284,9 +301,7 @@ if __name__ == '__main__':
             traceback.print_exc()
             break
         try:
-            parse_do()
+            parse_do(line, sys.stdout)
         except Exception:
             traceback.print_exc()
-
-
 
