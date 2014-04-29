@@ -32,6 +32,7 @@ def load_cfg(fn):
     return 1
 
 load_cfg('/etc/douban/sqlstore/algorithm.json')
+load_cfg('/etc/douban/sqlstore/algorithm-dev.json')
 
 def normalize_farm_name(farm):
     if farm in farm_cfg_dict:

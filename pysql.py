@@ -3,8 +3,14 @@ import os, sys
 import readline
 import traceback
 import time
-from get_cursor import find_table, load_tables, get_cursor
+import re
+from get_cursor import (find_table, load_tables, get_cursor,
+                        farm_tables_dict)
 
+
+"""
+    Component for result display
+"""
 def ch_width(ch):
     # East_Asian_Width:
     #   A : Ambguous;
@@ -32,6 +38,11 @@ def ch_width(ch):
         if ch <= idx:
             return width
     return 1
+
+def ch_trans(ch):
+    if (ord(ch) <= 0x20) or ((ord(ch) >= 0x7f) and (ord(ch) <= 0xa0)):
+        return u' '
+    return ch
 
 def str_width(text):
     return sum([ch_width(ch) for ch in text.decode('utf8')])
@@ -92,6 +103,7 @@ def str_split(text, max_len, padding=' ', center=False):
     cur_len, cur_line = 0, u''
     lines = []
     for ch in text:
+        ch = ch_trans(ch)
         _width = ch_width(ch)
         if (cur_len + _width) <= max_len:
             cur_len += _width
@@ -177,7 +189,7 @@ def print_sql_result(cursor, fp):
     hl, hr, hs, hb = "╠", "╣", "╪", "═"
     ll, lr, ls, lb = "╚", "╝", "╧", "═"
     m_cl, h_cl, m_cr, h_cr = "║", "║", "║", "║"
-    h_cs, m_cs = "│", "|"
+    h_cs, m_cs = "|", "|"
 
     # local column & row's size for tables
     desc = cursor.description
@@ -212,11 +224,19 @@ def print_sql_result(cursor, fp):
     else:
         print_sql_result_g(cursor, fp)
 
+"""
+    Component for sql commands complete
+"""
 def do_cmdline_complete(text, state, line=None, start_idx=0):
     line = line or readline.get_line_buffer()
     start = readline.get_begidx() - start_idx
     # match start commands
     if start == 0:
+        if text.startswith('.'):
+            options = [_c.name for _c in all_dot_commands() \
+                       if _c.name.startswith(text)]
+            if state < len(options):
+                return options[state] + ' '
         sql_start_commands = [
                                 'select', 'describe', 'explain', 'show',
                                 'create', 'insert', 'update', 'replace',
@@ -227,6 +247,13 @@ def do_cmdline_complete(text, state, line=None, start_idx=0):
         options = [_command for _command in sql_start_commands \
                    if _command.startswith(text)] + [None]
         return options[state]
+
+    # match dot command parameters
+    if line.startswith('.'):
+        command = line.split()[0]
+        cmd_obj = [_c for _c in all_dot_commands() if \
+                   _c.name == command][0]()
+        return cmd_obj.complete(text, state)
 
     # match table and field
     check_line = line[:start] + ' check_table_name__'
@@ -267,18 +294,88 @@ def do_cmdline_complete(text, state, line=None, start_idx=0):
                _func.startswith(text)] + [None]
     return options[state]
 
+"""
+    Component for dot commands
+"""
+class dot_command(object):
+    def execute(self, line):
+        pass
+
+def all_dot_commands():
+    all_commands = [globals()[obj] for obj in globals() if \
+                    ((type(globals()[obj])==type) and \
+                    issubclass(globals()[obj], dot_command))]
+    all_commands.remove(dot_command)
+    return all_commands
+
+class dot_help(dot_command):
+    name = '.help'
+    help = '''
+    .help
+        .help COMMAND: show command's detail
+    '''
+    def execute(self, line):
+        commands = re.match("\S+\s+(.*)", line)
+        all_commands = all_dot_commands()
+        if not commands:
+            print 'available commands: SQL, ' + \
+                    ', '.join([_c.name for _c in all_commands])
+        else:
+            cur_command = commands.groups()[0]
+            for _c in all_commands:
+                if _c.name == cur_command:
+                    print _c.help
+                    return
+            print dot_help.help
+
+class dot_list(dot_command):
+    name = '.list'
+    help = '''
+    .list
+        .list: list available farms
+        .list FARM: list tables of specific farm
+    '''
+
+    def execute(self, line):
+        commands = re.match("\S+\s+(.*)", line)
+        if not commands:
+            print 'farms:', ', '.join(farm_tables_dict)
+        else:
+            farms = commands.groups()
+            for _farm in farms:
+                tables = load_tables(_farm)
+                if tables:
+                    print 'farm %s has tables: %s' % (_farm, ', '.join(tables))
+
+    def complete(self, text, state):
+        options = [farm for farm in farm_tables_dict if farm.startswith(text)]
+        if state < len(options):
+            return options[state]
+
 def parse_do(line, fp):
-    table, ro = find_table(line)
-    if not table:
-        print 'no table found, try again!'
+    if line == '':
         return
-    cursor = get_cursor(table=table, ro=ro)
-    start_time = time.time()
-    cursor.execute(line)
-    print_sql_result(cursor, fp)
-    end_time = time.time()
-    if (cursor.rowcount is not None) and (cursor.rowcount >= 0):
-        print '%s rows, %s seconds' % (cursor.rowcount, (end_time - start_time))
+    elif line.startswith('.'):
+        try:
+            for _c in all_dot_commands():
+                if line.startswith(_c.name):
+                    _c().execute(line)
+        except Exception:
+            raise Exception('command not found!')
+    elif line.startswith(('?', 'help')):
+        return dot_help().execute(line)
+    else:
+        table, ro = find_table(line)
+        if not table:
+            print 'no table found, try again!'
+            return
+        cursor = get_cursor(table=table, ro=ro)
+        start_time = time.time()
+        cursor.execute(line)
+        print_sql_result(cursor, fp)
+        end_time = time.time()
+        if (cursor.rowcount is not None) and (cursor.rowcount >= 0):
+            print '%s rows, %s seconds' % (cursor.rowcount, (end_time - start_time))
 
 if __name__ == '__main__':
     try:
@@ -290,7 +387,7 @@ if __name__ == '__main__':
         pass
     while True:
         try:
-            line = raw_input('\001\033[1;32m\002pysql> \001\033[0m\002')
+            line = raw_input('\001\033[1;32m\002☭ ➸  \001\033[0m\002')
         except EOFError:
             print ''
             break
