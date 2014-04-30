@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # -*- coding:utf-8 -*-
 import os, sys
 import readline
@@ -7,6 +8,7 @@ import re
 from get_cursor import (find_table, load_tables, get_cursor,
                         farm_tables_dict)
 
+all_tables = load_tables()
 
 """
     Component for result display
@@ -227,7 +229,8 @@ def print_sql_result(cursor, fp):
 """
     Component for sql commands complete
 """
-def do_cmdline_complete(text, state, line=None, start_idx=0):
+def do_cmdline_complete(text, state, line=None, start_idx=0,
+                        farm_tables=all_tables):
     line = line or readline.get_line_buffer()
     start = readline.get_begidx() - start_idx
     # match start commands
@@ -260,26 +263,26 @@ def do_cmdline_complete(text, state, line=None, start_idx=0):
     at_table_name = find_table(check_line)[0] == 'check_table_name__'
     if not at_table_name:
         table = find_table(line)[0]
-        if table and (table in all_tables):
+        if table and (table in farm_tables):
             cursor = get_cursor(table=table)
             cursor.execute('desc `%s`' % table)
             fields = [val[0] for val in cursor.fetchall()]
             options = [_field for _field in fields if \
                        _field.startswith(text)]
             if state < len(options):
-                return options[state]
+                return options[state] + ' '
             if options: return None
     else:
         table = text
         if table.startswith('`'):
             table = table[1:]
         if table:
-            options = [_table for _table in all_tables if \
+            options = [_table for _table in farm_tables if \
                        _table.startswith(table)]
             if text.startswith('`'):
                 return '`' + options[state] + '`'
             if state < len(options):
-                return options[state]
+                return options[state] + ' '
             if options: return None
 
     # match sql function
@@ -291,8 +294,10 @@ def do_cmdline_complete(text, state, line=None, start_idx=0):
                             'on duplicate key update'
                         ]
     options = [_func for _func in sql_func_commands if \
-               _func.startswith(text)] + [None]
-    return options[state]
+               _func.startswith(text)]
+    if state < len(options):
+        return options[state] + ' '
+    return None
 
 """
     Component for dot commands
@@ -314,6 +319,7 @@ class dot_help(dot_command):
     .help
         .help COMMAND: show command's detail
     '''
+
     def execute(self, line):
         commands = re.match("\S+\s+(.*)", line)
         all_commands = all_dot_commands()
@@ -352,7 +358,125 @@ class dot_list(dot_command):
         if state < len(options):
             return options[state]
 
+class dot_clear(dot_command):
+    name = '.clear'
+    help = '''
+    .clear
+        .clear: clear screen
+    '''
+
+    def execute(self, line):
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+class dot_where(dot_command):
+    name = '.where'
+    help = '''
+    .where
+        .where TABLES: show farms that tables belonging to
+    '''
+
+    def execute(self, line):
+        tables = line.split()[1:]
+        for _table in tables:
+            farms = [_farm for _farm, table_set in farm_tables_dict.items() \
+                     if _table in table_set]
+            if farms:
+                print 'table "%s" in farms: %s' % (_table, ', '.join(farms))
+            else:
+                print 'table "%s" no exists' % _table
+
+    def complete(self, text, state):
+        options = [_table for _table in all_tables if _table.startswith(text)]
+        if state < len(options):
+            return options[state] + ' '
+
+class dot_table(dot_command):
+    name = '.table'
+    help = '''
+    .table
+        .table: dynamically reload tables from farms
+    '''
+
+    def execute(self, line):
+        ot = time.time()
+        load_tables()
+        print "reloaded tables dynamically from databases in %s seconds" % \
+                (time.time() - ot)
+
+class dot_quick_raw(dot_command):
+    name = '.qr'
+    help = '''
+    .qr
+        .qr [0|1] FARM SQL: execute sql commands with readonly, table & farm explicitly
+
+        Examples:
+            .qr ro=0 farm=user update user ...
+            .qr rivendell select * from ...
+            .qr 0 farm=rivendell create table ...
+            .qr 0 rivendell drop table ...
+    '''
+
+    def _split(self, line):
+        _pattern = r'.qr +(?:(?:ro *= *)?(0|1) +)?(?:(?:farm *= *)?(\w+) +)?(.*)'
+        sql_start_commands = [
+                                'select', 'describe', 'explain', 'show',
+                                'create', 'insert', 'update', 'replace',
+                                'delete', 'drop', 'alter', 'rename',
+                                'truncate', 'repair', 'analyze', 'backup',
+                                'restore', 'check', 'checksum', 'load data'
+                             ]
+        res = re.match(_pattern, line)
+        if not res:
+            ro, farm, sql = None, None, None
+        else:
+            ro, farm, sql = res.groups()
+            if farm and (farm.lower().strip() in sql_start_commands):
+                sql = farm + ' ' + sql
+                farm = None
+        ro = int(1 if not ro else ro)
+        return (ro, farm, sql)
+
+    def execute(self, line):
+        ro, farm, sql = self._split(line)
+        if not sql:
+            return
+        if not farm:
+            _table, ro = find_table(sql)
+            cursor = get_cursor(table=_table, ro=ro)
+        else:
+            cursor = get_cursor(farm=farm, ro=ro)
+        do_sql(cursor, sql, sys.stdout)
+
+    def complete(self, text, state):
+        # match farm
+        options = [_farm for _farm in farm_tables_dict.keys() \
+                   if _farm.startswith(text)]
+        if state < len(options):
+            return options[state] + ' '
+
+        # match sql commands
+        line = readline.get_line_buffer()
+        ro, farm, sql = self._split(line)
+        farm = farm and farm.strip()
+        if farm:
+            farm_tables = farm_tables_dict.get(farm, set())
+        else:
+            farm_tables = all_tables
+        new_start = len(line) - len(sql)
+        return do_cmdline_complete(text, state, line=sql, start_idx=new_start,
+                                   farm_tables=farm_tables)
+
+def do_sql(cursor, line, fp):
+    start_time = time.time()
+    cursor.execute(line)
+    print_sql_result(cursor, fp)
+    end_time = time.time()
+    if (cursor.rowcount is not None) and (cursor.rowcount >= 0):
+        print '%s rows, %s seconds' % (cursor.rowcount,
+                                       (end_time - start_time))
+
 def parse_do(line, fp):
+    line = line.strip()
     if line == '':
         return
     elif line.startswith('.'):
@@ -361,6 +485,7 @@ def parse_do(line, fp):
                 if line.startswith(_c.name):
                     _c().execute(line)
         except Exception:
+            traceback.print_exc()
             raise Exception('command not found!')
     elif line.startswith(('?', 'help')):
         return dot_help().execute(line)
@@ -370,19 +495,12 @@ def parse_do(line, fp):
             print 'no table found, try again!'
             return
         cursor = get_cursor(table=table, ro=ro)
-        start_time = time.time()
-        cursor.execute(line)
-        print_sql_result(cursor, fp)
-        end_time = time.time()
-        if (cursor.rowcount is not None) and (cursor.rowcount >= 0):
-            print '%s rows, %s seconds' % (cursor.rowcount, (end_time - start_time))
+        do_sql(cursor, line, fp)
 
 if __name__ == '__main__':
     try:
         readline.parse_and_bind('tab: complete')
         readline.set_completer(do_cmdline_complete)
-        global all_tables
-        all_tables = load_tables()
     except:
         pass
     while True:
