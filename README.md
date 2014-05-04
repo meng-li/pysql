@@ -1,12 +1,13 @@
 #pysql
 ---
-A Simple command shell help you to manage multiple farms and tables.
+A Simple command shell help you to communicate with multiple farms and tables without concerning about connection string everytime.
 
 Features:
 
-1. Formated output of sql commands;
-2. Manage data source from different services (master, slave & backup) automatically and manually;
-3. Tab-completion for farms, tables and sql commands.
+1. Connection string persistence in a configuration file;
+2. Formated output of sql commands;
+3. Manage data source from different services (master, slave & backup) automatically and manually;
+4. Tab-completion for farms, tables and sql commands.
 
 Some Screenshots:
 
