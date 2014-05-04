@@ -290,7 +290,7 @@ def do_cmdline_complete(text, state, line=None, start_idx=0,
                             'count(', 'sum(', 'dinstinct', 'from', 'where',
                             'limit', 'group by', 'replace', 'ignore',
                             'order by', 'asc', 'desc', 'having', 'local',
-                            'infile', 'into table', 'values',
+                            'infile', 'into', 'values',
                             'on duplicate key update'
                         ]
     options = [_func for _func in sql_func_commands if \
