@@ -1,0 +1,15 @@
+{
+    "farms": {
+        "leaftime_farm": {
+            "tables": [
+                "note", 
+                "user", 
+                "user_regist", 
+                "*"
+            ], 
+            "master": "localhost:3306:leaftime:root:"
+        }
+    }, 
+    "migration": {}, 
+    "options": {}
+}

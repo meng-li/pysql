@@ -469,6 +469,7 @@ class dot_quick_raw(dot_command):
 def do_sql(cursor, line, fp):
     start_time = time.time()
     cursor.execute(line)
+    cursor.connection.commit()
     print_sql_result(cursor, fp)
     end_time = time.time()
     if (cursor.rowcount is not None) and (cursor.rowcount >= 0):

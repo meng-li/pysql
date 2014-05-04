@@ -1,26 +1,26 @@
 default_params = {
     'roles': ['m', 's', 'b', 'g', 'h'],
     'rw_user': {
-        'user': 'luzong',
-        'passwd': 'fulllink'
+        'user': 'root',
+        'passwd': ''
     },
     'ro_user': {
-        'user': 'eye',
-        'passwd': 'sauron'
+        'user': 'root',
+        'passwd': ''
     },
     'tables': [],
 }
 
 farms = {
-    'luz': {
+    'leaftime': {
         'port': 3306,
-        'dbs': ['luz_farm'],
+        'dbs': ['leaftime'],
         'online': True,
     },
 }
 
 configs = {
-    'shire-online.json': {
-        'instances': ['luz_m'],
+    'conf.json': {
+        'instances': ['leaftime_m'],
     }
 }

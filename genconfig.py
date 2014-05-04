@@ -98,9 +98,7 @@ class FarmManager(object):
             user = _conf['ro_user']['user']
             passwd = _conf['ro_user']['passwd']
 
-        host_prefix = _conf.get('host_prefix', None)
-        host = '%s_%s' % (farm, role) if not host_prefix else '%s_%s' % (host_prefix, role)
-        host = _conf['hostname'] if _conf.get('hostname') else host
+        host = _conf['hostname'] if _conf.get('hostname') else 'localhost'
         conf = {
             'host': host,
             'port': _conf['port'],
@@ -141,8 +139,6 @@ class FarmManager(object):
             return tables
 
         dbcnf = self.get_sqlstore_dbcnf('%s_m' % farm)
-        #farm = SqlFarm(dbcnf, connect_timeout=1)
-        #cursor = farm.get_cursor()
         cursor = self.get_cursor(dbcnf)
         cursor.execute('show tables')
         tables = [r[0] for r in cursor.fetchall()]
@@ -239,7 +235,7 @@ def main():
             print >>sys.stderr, 'Skip generating config file "%s": %s'  % (output_filename, exc)
             skipped += 1
             continue
-        _format = options.get('format', 'python')
+        _format = options.get('format', 'json')
         if not _format in ('python', 'json'):
             raise Exception('Invaid output format: %s' % _format)
         config = farms_config

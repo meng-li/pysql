@@ -12,6 +12,7 @@ def load_cfg(fn):
         import json
         farms = json.load(open(fn, 'r'))['farms']
     except Exception:
+        print traceback.print_exc()
         warnings.warn('reading configuration %s failed' % fn)
         return -1
     for farm, cfg in farms.iteritems():
@@ -31,8 +32,7 @@ def load_cfg(fn):
             farm_tables_dict[farm] = set()
     return 1
 
-load_cfg('/etc/douban/sqlstore/algorithm.json')
-load_cfg('/etc/douban/sqlstore/algorithm-dev.json')
+load_cfg('./conf.json')
 
 def normalize_farm_name(farm):
     if farm in farm_cfg_dict:
