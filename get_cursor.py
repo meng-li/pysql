@@ -184,7 +184,6 @@ def get_conn_conf(dfarm='luz', **kargs):
 def get_cursor(**kargs):
     # environment initialization
     persist = kargs.get('persist', None)
-    reconnect = kargs.get('reconnect', None)
     quota = kargs.get('quota', True)
     static = kargs.get('static', False)
     quota = False if static else quota
